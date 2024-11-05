@@ -36,10 +36,10 @@ d_idewrite: equ   044ah
 
 begin:      br    start
 
-            db    4+80h                 ; month
-            db    3                     ; day
+            db    5+80h                 ; month
+            db    18                    ; day
             dw    2024                  ; year
-            dw    2                     ; build
+            dw    3                     ; build
 
             db    'See github/dmadole/Elfos-copy for more information',0
 
@@ -55,7 +55,7 @@ skipini:    lda   ra                    ; skip any leading spaces
             sdi   ' '-'-'               ; a dash starts an option
             lbnz  notdash
 
-            lda   ra                    ; the v option is for verbose
+chkopts:    lda   ra
             smi   'v'
             lbnz  notvopt
 
@@ -66,18 +66,46 @@ skipini:    lda   ra                    ; skip any leading spaces
             lbr   endopts
 
 notvopt:    smi   'd'-'v'
-            lbnz  dousage
+            lbnz  notdopt
 
-            ghi   r9                    ; set the flag for verbose
+            ghi   r9                    ; set the flag for directory
             ori   2
             phi   r9
 
-endopts:    lda   ra                    ; make sure a space follows
+            lbr   endopts
+
+notdopt:    smi   'f'-'d'
+            lbnz  notfopt
+
+            ghi   r9                    ; set the flag for flags
+            ori   4
+            phi   r9
+
+            lbr   endopts
+
+notfopt:    smi   't'-'f'
+            lbnz  nottopt
+
+            ghi   r9                    ; set the flag for time
+            ori   8
+            phi   r9
+
+            lbr   endopts
+
+nottopt:    smi   'a'-'t'
+            lbnz  dousage
+
+            ghi   r9                    ; set the flag for flags and time
+            ori   4+8
+            phi   r9
+
+endopts:    lda   ra                    ; see if spaces follow
             lbz   dousage
             sdi   ' '
             lbdf  skipini
 
-            lbr   dousage               ; if not then error
+            dec   ra                    ; if not check another option
+            lbr   chkopts
 
 
           ; If not an option, then it is the source path name.
@@ -148,7 +176,7 @@ skipend:    lda   ra                    ; skip any trailing spaces
 
 dousage:    sep   scall                 ; anything else following is error
             dw    o_inmsg
-            db    'USAGE: copy [-v] [-d] source dest',13,10,0
+            db    'USAGE: copy [-v] [-d] [-f|-t|-a] source dest',13,10,0
 
             sep   sret
 
@@ -645,35 +673,77 @@ cpyfile:    ghi   r9
             dw    o_inmsg
             db    13,10,0
 
-
-          ; The D, X, and W flags are copied into the fildes by o_open so
-          ; grab them now so set on the target file later. D will always be
-          ; clear since the source is not a directory.
-
 notverb:    glo   rd                    ; save source fildes
             stxd
             ghi   rd
             stxd
 
-            glo   rd                    ; get flags of source file
-            adi   8
-            plo   rd
+
+          ; If the copy flags or time options are set, then get the flags and
+          ; time from the source file from the directory entry. Unfortunately
+          ; there isn't currently a way to do this without a sector read.
+
+            ghi   r9                    ; skip if copy options not set
+            ani   4+8
+            lbz   opendst
+
+            glo   rd                    ; get pointer to dir sector
+            adi   9
+            plo   rc
             ghi   rd
             adci  0
-            phi   rd
+            phi   rc
 
-            ldn   rd                    ; shift into dirent position
-            shr
-            shr
-            shr
-            shr
-            shr
+            lda   rc                    ; get destination file dir sector
+            phi   r8
+            lda   rc
+            plo   r8
+            lda   rc
+            phi   r7
+            lda   rc
+            plo   r7
+
+            ldi   buffer.1              ; pointer to buffer
+            phi   rf
+            ldi   buffer.0
+            plo   rf
+   
+            sep   scall                 ; load directory sector
+            dw    d_ideread
+            lbdf  endcopy
+
+            inc   rc                    ; point to flags in buffer
+            ldn   rc
+            adi   (buffer+6).0
+            plo   rf
+            dec   rc
+            ldn   rc
+            adci  (buffer+6).1
+            phi   rf
+
+            lda   rf                    ; get flags
             plo   r9
+
+            ldi   datetim.1             ; point to save area
+            phi   rc
+            ldi   datetim.0
+            plo   rc
+
+            ldi   4                     ; length of date and time
+            plo   re
+
+savtime:    lda   rf                    ; copy data from source
+            str   rc
+            inc   rc
+
+            dec   re                    ; repeat for all bytes
+            glo   re
+            lbnz  savtime
 
 
           ; Open the destination file now to receive the copy.
 
-            ldi   dstname.1             ; destination file name
+opendst:    ldi   dstname.1             ; destination file name
             phi   rf
             ldi   dstname.0
             plo   rf
@@ -694,7 +764,7 @@ notverb:    glo   rd                    ; save source fildes
             dw    o_inmsg
             db    "ERROR: can not create target",13,10,0
 
-            lbr   restsrc
+            lbr   endcopy
 
 
           ; Copy the file one sector-sized buffer at a time from source to
@@ -788,17 +858,15 @@ chkmore:    glo   rc                    ; done if less than 512 bytes
             lbdf  cpyloop               ; loop until done
 
 
-          ; If there were flags set on the source file, then set them on the
-          ; target file as well. Note this only works for the X and W flags
-          ; that are copied into the fildes flags byte.
+          ; Close the output file, but first get the address of its directory
+          ; sector in case we need to set flags or date on it.
 
-setflag:    glo   r9                    ; were any flags set on source?
-            lbz   endcopy
-
-            ldi   (dstfile+9).1         ; get pointer to dir sector
-            phi   rc
-            ldi   (dstfile+9).0
+setflag:    glo   rd                    ; get pointer to dir sector
+            adi   9
             plo   rc
+            ghi   rd
+            adci  0
+            phi   rc
 
             lda   rc                    ; get destination file dir sector
             phi   r8
@@ -809,7 +877,25 @@ setflag:    glo   r9                    ; were any flags set on source?
             lda   rc
             plo   r7
 
-            ldi   buffer.1              ; pointer to buffer
+            sep   scall                 ; close destination file
+            dw    o_close
+
+
+          ; If copy flags or time options were set then load the directory
+          ; sector of the destination file so we can chance them.
+
+            ghi   r9                    ; copy flags or time not set
+            ani   4+8
+            lbz   endcopy
+
+            ghi   r9                    ; if not copy flags then dont test
+            ani   4
+            lbz   loaddir
+
+            glo   r9                    ; else only load if flags are set
+            lbz   endcopy
+
+loaddir:    ldi   buffer.1              ; pointer to buffer
             phi   rf
             ldi   buffer.0
             plo   rf
@@ -827,27 +913,52 @@ setflag:    glo   r9                    ; were any flags set on source?
             adci  (buffer+6).1
             phi   rf
 
-            glo   r9                    ; set flags from source
-            str   r2
-            ldn   rf
-            or
+            ghi   r9                    ; dont set flags if not option
+            ani   4
+            lbz   settime
+
+            glo   r9                    ; else set flags from source
             str   rf
 
-            ldi   buffer.1              ; pointer to buffer
+            ghi   r9                    ; dont set time if not option
+            ani   8
+            lbz   savflag
+
+settime:    inc   rf                    ; move to date and time
+
+            ldi   datetim.1             ; pointer to saved time
+            phi   rc
+            ldi   datetim.0
+            plo   rc
+
+            ldi   4                     ; four bytes to copy
+            plo   re
+
+copytim:    lda   rc                    ; copy date and time
+            str   rf
+            inc   rf
+
+            dec   re                    ; repeat for four bytes
+            glo   re
+            lbnz  copytim
+
+
+          ; If either flags or time was change then write the directory
+          ; sector back out to save.
+
+savflag:    ldi   buffer.1              ; pointer to buffer
             phi   rf
             ldi   buffer.0
             plo   rf
 
             sep   scall                 ; write dir sector back out
             dw    d_idewrite
+            lbdf  endcopy
 
 
-          ; All data has been copied, close the destination descriptor.
+          ; All data has been copied, restore source fildes and return.
 
-endcopy:    sep   scall                 ; close destination file
-            dw    o_close
-
-restsrc:    irx                         ; restore source fildes
+endcopy:    irx                         ; restore source fildes
             ldxa
             phi   rd
             ldx
@@ -1005,6 +1116,8 @@ tmpfile:    db    0,0,0,0
           ; executable but are not included in the executable. They will be
           ; reflected in the header size though so that the kernel will check
           ; that there is enough room before running the program.
+
+datetim:    ds    4                     ; to dave date and time
 
 dirent:     ds    32                    ; directory entry buffer
 
