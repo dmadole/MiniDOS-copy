@@ -1,9 +1,6 @@
-# Elf/OS Copy
+# MiniDOS-copy
 
-> [!NOTE]
->This repository has a submodule for the include files needed to build it. You can have these pulled automatically if you add the  --recurse option to your git clone command.
-
-This is a copy  utility for Elf/OS 4 or earlier, able to copy single files, or all the files in a directory (but nor recursively).
+This is a copy  utility for Mini/DOS, able to copy single files, or all the files in a directory (but nor recursively).
 
 If the source path names a directory, the files in that directory will be copied. In this case, if the target path names an existing directory, the files are copied into it. Or, if there is nothing at the target path, the named directory will be created, then the files copied into it. It is an error if the target path names an existing file.
 
