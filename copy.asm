@@ -36,12 +36,12 @@ d_idewrite: equ   044ah
 
 begin:      br    start
 
-            db    5+80h                 ; month
-            db    18                    ; day
+            db    11+80h                ; month
+            db    5                     ; day
             dw    2024                  ; year
-            dw    3                     ; build
+            dw    4                     ; build
 
-            db    'See github/dmadole/Elfos-copy for more information',0
+            db    'See github/dmadole/MiniDOS-copy for more information',0
 
 
 start:      ldi   0                     ; clear flags
