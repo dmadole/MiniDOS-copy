@@ -36,10 +36,10 @@ d_idewrite: equ   044ah
 
 begin:      br    start
 
-            db    11+80h                ; month
+            db    1+80h                 ; month
             db    5                     ; day
-            dw    2024                  ; year
-            dw    4                     ; build
+            dw    2026                  ; year
+            dw    5                     ; build
 
             db    'See github/dmadole/MiniDOS-copy for more information',0
 
