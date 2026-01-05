@@ -41,7 +41,7 @@ begin:      br    start
             dw    2026                  ; year
             dw    5                     ; build
 
-            db    'See github/dmadole/MiniDOS-copy for more information',0
+            db    'See github.com/dmadole/MiniDOS-copy for more information',0
 
 
           ; Size of chunk to copy at once. Let's try one allocaiton unit.
