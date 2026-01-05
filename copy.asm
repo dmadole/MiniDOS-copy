@@ -44,6 +44,11 @@ begin:      br    start
             db    'See github/dmadole/MiniDOS-copy for more information',0
 
 
+          ; Size of chunk to copy at once. Let's try one allocaiton unit.
+
+          #define BUFSIZE 4096
+
+
 start:      ldi   0                     ; clear flags
             phi   r9
 
@@ -781,9 +786,9 @@ cpyloop:    irx                         ; restore source fildes
             ldi   buffer.0
             plo   rf
 
-            ldi   512.1                 ; transfer one sector of data
+            ldi   BUFSIZE.1             ; transfer one allocation unit
             phi   rc
-            ldi   512.0
+            ldi   BUFSIZE.0
             plo   rc
 
             sep   scall                 ; read data, check for error later
@@ -850,10 +855,10 @@ wrtdata:    ldi   buffer.1              ; pointer to data buffer
           ; If this was a full buffer then there is more data in the file,
           ; loop back and get the next chunk. Otherwise, we are done.
 
-chkmore:    glo   rc                    ; done if less than 512 bytes
-            smi   512.0
+chkmore:    glo   rc                    ; done if less than bufsize bytes
+            smi   BUFSIZE.0
             ghi   rc
-            smbi  512.1
+            smbi  BUFSIZE.1
 
             lbdf  cpyloop               ; loop until done
 
@@ -1124,7 +1129,7 @@ dirent:     ds    32                    ; directory entry buffer
 srcname:    ds    256                   ; path name buffers
 dstname:    ds    256
 
-buffer:     ds    512                   ; sector buffer for copies
+buffer:     ds    BUFSIZE               ; sector buffer for copies
 
 dta1:       ds    512                   ; data transfer areas for fildes
 dta2:       ds    512
